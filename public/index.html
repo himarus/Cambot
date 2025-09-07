@@ -1,61 +1,40 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <title>Take a Photo</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 30px; }
-    video, canvas { max-width: 100%; }
-  </style>
+  <title>Camera Upload</title>
 </head>
 <body>
-  <h2>Take a Photo</h2>
-  <video id="video" autoplay playsinline width="320" height="240"></video><br>
-  <button id="captureBtn">📸 Capture & Send</button>
-  <p id="status"></p>
+  <h1>Send Photo to Telegram</h1>
+  <video id="video" autoplay playsinline></video>
+  <button id="capture">Capture & Send</button>
+  <canvas id="canvas" style="display:none;"></canvas>
 
   <script>
-    const video = document.getElementById('video');
-    const status = document.getElementById('status');
-    const captureBtn = document.getElementById('captureBtn');
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const captureBtn = document.getElementById("capture");
 
-    // start camera
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-      } catch (err) {
-        status.textContent = "Camera access denied.";
-        console.error(err);
-      }
-    }
-    startCamera();
+    // open camera
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => { video.srcObject = stream; });
 
-    captureBtn.addEventListener('click', async () => {
-      status.textContent = "Capturing...";
+    captureBtn.addEventListener("click", async () => {
+      const ctx = canvas.getContext("2d");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
 
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 320;
-      canvas.height = video.videoHeight || 240;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg"));
+      const buffer = await blob.arrayBuffer();
 
-      canvas.toBlob(async (blob) => {
-        const formData = new FormData();
-        formData.append("photo", blob, "photo.jpg");
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: buffer
+      });
 
-        status.textContent = "Sending to Telegram...";
-
-        try {
-          const res = await fetch("/upload", { method: "POST", body: formData });
-          const json = await res.json();
-          if (json.ok) status.textContent = "✅ Sent!";
-          else status.textContent = "❌ Error sending photo.";
-        } catch (e) {
-          status.textContent = "Network error.";
-          console.error(e);
-        }
-      }, "image/jpeg", 0.9);
+      const result = await response.json();
+      console.log(result);
+      alert("Sent to Telegram!");
     });
   </script>
 </body>
