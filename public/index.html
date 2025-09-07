@@ -1,13 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Camera Upload</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cambot Camera</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Orbitron', sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #00f2fe;
+      text-shadow: 0 0 15px rgba(0, 242, 254, 0.7);
+    }
+
+    video {
+      width: 90%;
+      max-width: 420px;
+      border: 3px solid #00f2fe;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 12px 30px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      background: linear-gradient(90deg, #00f2fe, #4facfe);
+      color: #111;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+      transition: all 0.2s ease-in-out;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 35px rgba(79, 172, 254, 0.9);
+    }
+
+    footer {
+      margin-top: 40px;
+      font-size: 0.8rem;
+      opacity: 0.7;
+    }
+  </style>
 </head>
 <body>
-  <h1>Send Photo to Telegram</h1>
-  <video id="video" autoplay playsinline></video>
-  <button id="capture">Capture & Send</button>
+  <h1>🤖 Cambot Camera</h1>
+  <video id="video" autoplay playsinline></video><br>
+  <button id="capture">📸 Capture & Send</button>
   <canvas id="canvas" style="display:none;"></canvas>
+
+  <footer>Powered by Cambot • Telegram Bot</footer>
 
   <script>
     const video = document.getElementById("video");
@@ -16,7 +77,8 @@
 
     // open camera
     navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => { video.srcObject = stream; });
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert("Camera error: " + err));
 
     captureBtn.addEventListener("click", async () => {
       const ctx = canvas.getContext("2d");
@@ -24,17 +86,26 @@
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
 
+      // Convert to Blob (JPEG)
       const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg"));
-      const buffer = await blob.arrayBuffer();
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: buffer
-      });
+      // Put into FormData (photo field required by API)
+      const form = new FormData();
+      form.append("photo", blob, "capture.jpg");
 
-      const result = await response.json();
-      console.log(result);
-      alert("Sent to Telegram!");
+      // Send to our API
+      try {
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: form
+        });
+        const result = await response.json();
+        console.log(result);
+        alert("✅ Sent to Telegram!");
+      } catch (err) {
+        console.error(err);
+        alert("❌ Upload failed");
+      }
     });
   </script>
 </body>
