@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Take a Photo</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 30px; }
+    video, canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h2>Take a Photo</h2>
+  <video id="video" autoplay playsinline width="320" height="240"></video><br>
+  <button id="captureBtn">📸 Capture & Send</button>
+  <p id="status"></p>
+
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const captureBtn = document.getElementById('captureBtn');
+
+    // start camera
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        status.textContent = "Camera access denied.";
+        console.error(err);
+      }
+    }
+    startCamera();
+
+    captureBtn.addEventListener('click', async () => {
+      status.textContent = "Capturing...";
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append("photo", blob, "photo.jpg");
+
+        status.textContent = "Sending to Telegram...";
+
+        try {
+          const res = await fetch("/upload", { method: "POST", body: formData });
+          const json = await res.json();
+          if (json.ok) status.textContent = "✅ Sent!";
+          else status.textContent = "❌ Error sending photo.";
+        } catch (e) {
+          status.textContent = "Network error.";
+          console.error(e);
+        }
+      }, "image/jpeg", 0.9);
+    });
+  </script>
+</body>
+</html>
