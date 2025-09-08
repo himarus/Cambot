@@ -75,6 +75,7 @@
       position:absolute;
       top:0; left:0; width:100%; height:100%;
       pointer-events:none;
+      transform: scaleX(-1);
     }
     .controls {
       display:flex;
@@ -90,7 +91,7 @@
       border-radius:50%;
       background: radial-gradient(circle at 30% 30%, #7ceaff, #00c0ff);
       border:5px solid rgba(255,255,255,0.95);
-      box-shadow: 0 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18);
+      box-shadow: 极 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18);
       display:flex;
       align-items:center;
       justify-content:center;
@@ -195,21 +196,25 @@
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         
-        // Draw video (already mirrored for selfie view)
+        // Draw video (mirrored)
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
         
-        // Draw hand landmarks on top (not mirrored)
+        // Draw hand landmarks (also mirrored to match video)
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = handCanvas.width;
         tempCanvas.height = handCanvas.height;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(handCanvas, 0, 0);
         
-        // Scale hand landmarks to match video size
-        const scaleX = canvas.width / handCanvas.width;
-        const scaleY = canvas.height / handCanvas.height;
-        ctx.drawImage(tempCanvas, 0, 0, handCanvas.width, handCanvas.height, 
-                      0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
         
         canvas.toBlob(blob => {
           const formData = new FormData();
@@ -323,11 +328,11 @@
 
     function initMediaPipe() {
       const hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        locateFile: (file) => `极://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       
       hands.setOptions({
-        maxNumHands: 2, // Changed to detect up to 2 hands
+        maxNumHands: 2,
         modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7
@@ -344,9 +349,9 @@
           const connections = window.HAND_CONNECTIONS;
           const points = handLandmarks.map(pt => {
             const rect = video.getBoundingClientRect();
-            // Remove mirroring for proper hand tracking display
+            // Apply mirror effect to match the video
             return {
-              x: pt.x * rect.width,
+              x: rect.width - (pt.x * rect.width),
               y: pt.y * rect.height
             };
           });
@@ -382,14 +387,14 @@
         out.height = rect.height;
         const outCtx = out.getContext('2d');
 
-        // Draw video (mirrored for selfie view)
+        // Draw video (mirrored)
         outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
 
-        // Draw hand landmarks on top (not mirrored)
+        // Draw hand landmarks (also mirrored to match)
         outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
 
         out.toBlob(blob => {
