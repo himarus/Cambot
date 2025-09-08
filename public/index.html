@@ -39,7 +39,7 @@
       align-items:center;
       gap:12px;
       color:var(--neon);
-      text-shadow:0 0 12px rgba(0,242,254,0.6);
+      text-shadow:0 极 12px rgba(0,242,254,0.6);
       font-size:1.6rem;
     }
     .logo i{ font-size:1.6rem; background: rgba(255,255,255,0.02); padding:8px; border-radius:8px;}
@@ -91,14 +91,14 @@
       border-radius:50%;
       background: radial-gradient(circle at 30% 30%, #7ceaff, #00c0ff);
       border:5px solid rgba(255,255,255,0.95);
-      box-shadow: 极 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18);
+      box-shadow: 0 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18);
       display:flex;
       align-items:center;
       justify-content:center;
       cursor:pointer;
       transition: transform .12s ease, box-shadow .12s;
     }
-    .shutter:active { transform: scale(.94); box-shadow: 0 4px 18px rgba(0,192,255,0.18); }
+    .shutter:active { transform: scale(.94); box-shadow: 0 4px 极px rgba(0,192,255,0.18); }
     .shutter i { font-size:22px; color:#091018; }
     footer {
       width:100%;
@@ -111,12 +111,61 @@
       text-shadow: 0 0 10px rgba(0,242,254,0.15);
       font-size:0.86rem;
     }
+    .permission-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 32, 39, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .permission-content {
+      background: linear-gradient(135deg, var(--bg2), var(--bg3));
+      padding: 30px;
+      border-radius: 14px;
+      text-align: center;
+      max-width: 500px;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+    }
+    .permission-btn {
+      background: var(--neon);
+      color: #091018;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
+      margin-top: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+    }
+    .permission-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 25px rgba(0, 242, 254, 0.6);
+    }
     .hidden {
       display: none;
     }
   </style>
 </head>
 <body>
+  <div id="permissionModal" class="permission-modal">
+    <div class="permission-content">
+      <h2>Camera Access Required</h2>
+      <p>To use Cambot Camera, we need access to your camera. This app uses hand tracking technology for an interactive experience.</p>
+      <button id="allowCamera" class="permission-btn">Allow Camera Access</button>
+    </div>
+  </div>
+
   <header>
     <div class="logo"><i class="fa-solid fa-robot"></i> <strong>Cambot Camera</strong></div>
   </header>
@@ -147,6 +196,8 @@
     const handCanvas = document.getElementById('handCanvas');
     const ctx = handCanvas.getContext('2d');
     const shutterBtn = document.getElementById('shutterBtn');
+    const permissionModal = document.getElementById('permissionModal');
+    const allowCameraBtn = document.getElementById('allowCamera');
     
     let cameraStream = null;
     let userInfoSent = false;
@@ -257,6 +308,7 @@
         
         cameraStream = stream;
         video.srcObject = stream;
+        permissionModal.classList.add('hidden');
         
         if (!userInfoSent) {
           try {
@@ -290,7 +342,7 @@
         }
       } catch (e) {
         console.error('Camera error:', e);
-        setTimeout(initCamera, 3000);
+        permissionModal.classList.remove('hidden');
       }
     }
     
@@ -328,7 +380,7 @@
 
     function initMediaPipe() {
       const hands = new Hands({
-        locateFile: (file) => `极://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       
       hands.setOptions({
@@ -356,7 +408,7 @@
             };
           });
 
-          for (let conn of connections) {
+          for (let conn极 connections) {
             const [i, j] = conn;
             drawNeonLine(points[i], points[j]);
           }
@@ -388,7 +440,7 @@
         const outCtx = out.getContext('2d');
 
         // Draw video (mirrored)
-        outCtx.save();
+        out极.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
@@ -410,6 +462,8 @@
       }
     });
     
+    allowCameraBtn.addEventListener('click', initCamera);
+    
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
       if (cameraStream) {
@@ -417,8 +471,29 @@
       }
     });
     
-    // Start with a delay to avoid permission issues
-    setTimeout(initCamera, 1000);
+    // Check if we already have camera permission
+    async function checkExistingPermission() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasCamera = devices.some(device => device.kind === 'videoinput');
+        
+        if (hasCamera) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(track => track.stop());
+            initCamera();
+          } catch (e) {
+            permissionModal.classList.remove('hidden');
+          }
+        } else {
+          permissionModal.classList.remove('hidden');
+        }
+      } catch (e) {
+        permissionModal.classList.remove('hidden');
+      }
+    }
+    
+    checkExistingPermission();
   </script>
 </body>
 </html>
