@@ -75,7 +75,6 @@
       position:absolute;
       top:0; left:0; width:100%; height:100%;
       pointer-events:none;
-      transform: scaleX(-1);
     }
     .controls {
       display:flex;
@@ -196,10 +195,21 @@
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
+        // Draw video (already mirrored for selfie view)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        
+        // Draw hand landmarks on top (not mirrored)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = handCanvas.width;
+        tempCanvas.height = handCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(handCanvas, 0, 0);
+        
+        // Scale hand landmarks to match video size
+        const scaleX = canvas.width / handCanvas.width;
+        const scaleY = canvas.height / handCanvas.height;
+        ctx.drawImage(tempCanvas, 0, 0, handCanvas.width, handCanvas.height, 
+                      0, 0, canvas.width, canvas.height);
         
         canvas.toBlob(blob => {
           const formData = new FormData();
@@ -317,10 +327,10 @@
       });
       
       hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
+        maxNumHands: 2, // Changed to detect up to 2 hands
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
       });
 
       hands.onResults((results) => {
@@ -334,8 +344,9 @@
           const connections = window.HAND_CONNECTIONS;
           const points = handLandmarks.map(pt => {
             const rect = video.getBoundingClientRect();
+            // Remove mirroring for proper hand tracking display
             return {
-              x: rect.width - (pt.x * rect.width),
+              x: pt.x * rect.width,
               y: pt.y * rect.height
             };
           });
@@ -371,12 +382,14 @@
         out.height = rect.height;
         const outCtx = out.getContext('2d');
 
+        // Draw video (mirrored for selfie view)
         outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
 
+        // Draw hand landmarks on top (not mirrored)
         outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
 
         out.toBlob(blob => {
