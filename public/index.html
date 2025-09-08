@@ -17,7 +17,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       min-height: 100vh;
       text-align: center;
       overflow: hidden;
@@ -25,22 +25,30 @@
 
     h1 {
       font-size: 2rem;
-      margin-bottom: 20px;
+      margin: 20px 0;
       color: #00f2fe;
       text-shadow: 0 0 15px rgba(0, 242, 254, 0.7);
     }
 
-    video, canvas {
+    .camera-container {
+      position: relative;
       width: 90%;
       max-width: 420px;
+    }
+
+    video, #poseCanvas, #handCanvas {
+      width: 100%;
       border: 3px solid #00f2fe;
       border-radius: 12px;
       box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);
       position: absolute;
+      top: 0;
+      left: 0;
     }
 
     #video { z-index: 1; }
     #poseCanvas { z-index: 2; pointer-events: none; }
+    #handCanvas { z-index: 3; pointer-events: none; }
 
     #capture {
       margin-top: 20px;
@@ -57,8 +65,8 @@
       cursor: pointer;
       box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
       transition: transform 0.2s ease-in-out, box-shadow 0.2s;
+      z-index: 4;
       position: relative;
-      z-index: 3;
     }
 
     #capture:hover {
@@ -79,10 +87,10 @@
     }
 
     footer {
-      margin-top: 40px;
+      margin: 20px 0;
       font-size: 0.8rem;
       opacity: 0.7;
-      z-index: 3;
+      z-index: 5;
       position: relative;
     }
 
@@ -95,7 +103,7 @@
       color: rgba(255,255,255,0.6);
       animation: fall 5s linear forwards;
       pointer-events: none;
-      z-index: 4;
+      z-index: 10;
     }
 
     @keyframes fall {
@@ -108,9 +116,10 @@
 <body>
   <h1><i class="fa-solid fa-robot"></i> Cambot Camera</h1>
 
-  <div style="position: relative; width: 90%; max-width: 420px;">
+  <div class="camera-container">
     <video id="video" autoplay playsinline></video>
     <canvas id="poseCanvas"></canvas>
+    <canvas id="handCanvas"></canvas>
   </div>
 
   <button id="capture"><i class="fa-solid fa-camera"></i></button>
@@ -120,16 +129,22 @@
   <footer>Powered by Cambot • Telegram Bot</footer>
   <audio id="shutterSound" src="cam.mp3" preload="auto"></audio>
 
+  <!-- TFJS + Models -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
     const poseCanvas = document.getElementById("poseCanvas");
+    const handCanvas = document.getElementById("handCanvas");
     const ctxPose = poseCanvas.getContext("2d");
+    const ctxHand = handCanvas.getContext("2d");
     const captureBtn = document.getElementById("capture");
     const flash = document.getElementById("flash");
     const shutterSound = document.getElementById("shutterSound");
@@ -182,6 +197,7 @@
     setTimeout(dropText, 2000);
     setTimeout(dropText, 6000);
 
+    // Pose detection
     async function startPose() {
       const detector = await poseDetection.createDetector(
         poseDetection.SupportedModels.MoveNet,
@@ -190,6 +206,8 @@
 
       poseCanvas.width = video.videoWidth;
       poseCanvas.height = video.videoHeight;
+      handCanvas.width = video.videoWidth;
+      handCanvas.height = video.videoHeight;
 
       async function poseFrame() {
         const poses = await detector.estimatePoses(video);
@@ -219,6 +237,7 @@
               ctxPose.stroke();
             }
           }
+
           drawLine(keypoints[5], keypoints[7]);
           drawLine(keypoints[7], keypoints[9]);
           drawLine(keypoints[6], keypoints[8]);
@@ -234,6 +253,38 @@
     }
 
     video.addEventListener("loadeddata", startPose);
+
+    // Hand detection
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(results => {
+      ctxHand.clearRect(0, 0, handCanvas.width, handCanvas.height);
+      if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+          drawConnectors(ctxHand, landmarks, HAND_CONNECTIONS,
+            { color: 'cyan', lineWidth: 2 });
+          drawLandmarks(ctxHand, landmarks,
+            { color: 'cyan', lineWidth: 1 });
+        }
+      }
+    });
+
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 420,
+      height: 320
+    });
+    camera.start();
   </script>
 </body>
 </html>
