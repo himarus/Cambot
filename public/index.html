@@ -30,12 +30,25 @@
       text-shadow: 0 0 15px rgba(0, 242, 254, 0.7);
     }
 
-    video {
+    .camera-wrapper {
+      position: relative;
       width: 90%;
       max-width: 420px;
+    }
+
+    video, #overlay {
+      width: 100%;
       border: 3px solid #00f2fe;
       border-radius: 12px;
       box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
     }
 
     #capture {
@@ -60,6 +73,69 @@
       box-shadow: 0 0 35px rgba(79, 172, 254, 0.9);
     }
 
+    /* Toggle Switch */
+    .toggle-container {
+      margin-top: 25px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .toggle-label {
+      font-size: 0.9rem;
+      color: #00f2fe;
+      text-shadow: 0 0 5px #00f2fe;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 32px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #555;
+      transition: .4s;
+      border-radius: 34px;
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 5px;
+      bottom: 5px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
+    }
+
+    input:checked + .slider {
+      background-color: #00f2fe;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.8);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(26px);
+      background-color: #111;
+    }
+
     #flash {
       position: fixed;
       top: 0;
@@ -69,6 +145,7 @@
       background: white;
       opacity: 0;
       pointer-events: none;
+      transition: opacity 0.2s;
     }
 
     footer {
@@ -97,20 +174,39 @@
 </head>
 <body>
   <h1><i class="fa-solid fa-robot"></i> Cambot Camera</h1>
-  <video id="video" autoplay playsinline></video><br>
+  <div class="camera-wrapper">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
   <button id="capture"><i class="fa-solid fa-camera"></i></button>
+
+  <!-- Toggle Glow Mode -->
+  <div class="toggle-container">
+    <span class="toggle-label">Glow Mode</span>
+    <label class="switch">
+      <input type="checkbox" id="glowToggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
   <canvas id="canvas" style="display:none;"></canvas>
   <div id="flash"></div>
 
   <footer>Powered by Cambot • Telegram Bot</footer>
   <audio id="shutterSound" src="cam.mp3" preload="auto"></audio>
 
+  <!-- TensorFlow + BodyPix -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0"></script>
+
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
+    const overlay = document.getElementById("overlay");
     const captureBtn = document.getElementById("capture");
     const flash = document.getElementById("flash");
     const shutterSound = document.getElementById("shutterSound");
+    const glowToggle = document.getElementById("glowToggle");
 
     navigator.mediaDevices.getUserMedia({ video: true })
       .then(stream => { video.srcObject = stream; })
@@ -161,6 +257,38 @@
 
     setTimeout(dropText, 2000);
     setTimeout(dropText, 6000);
+
+    async function startBodyPix() {
+      const net = await bodyPix.load();
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      const ctx = overlay.getContext("2d");
+
+      async function detect() {
+        if (glowToggle.checked) {
+          const segmentation = await net.segmentPerson(video);
+          ctx.clearRect(0, 0, overlay.width, overlay.height);
+          const mask = bodyPix.toMask(segmentation, { r: 0, g: 255, b: 255, a: 100 }, { r: 0, g: 0, b: 0, a: 0 });
+          ctx.putImageData(mask, 0, 0);
+          ctx.globalCompositeOperation = "source-in";
+          ctx.fillStyle = "rgba(0, 242, 254, 0.4)";
+          ctx.fillRect(0, 0, overlay.width, overlay.height);
+          ctx.globalCompositeOperation = "source-over";
+          ctx.shadowColor = "#00f2fe";
+          ctx.shadowBlur = 20;
+          ctx.strokeStyle = "#00f2fe";
+          ctx.lineWidth = 5;
+          ctx.strokeRect(0, 0, overlay.width, overlay.height);
+        } else {
+          ctx.clearRect(0, 0, overlay.width, overlay.height);
+        }
+        requestAnimationFrame(detect);
+      }
+
+      detect();
+    }
+
+    video.addEventListener("loadeddata", startBodyPix);
   </script>
 </body>
 </html>
