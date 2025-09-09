@@ -290,34 +290,43 @@
     document.body.appendChild(downloadLink);
     let lastObjectUrl = null;
 
-    shutterBtn.addEventListener('click', async () => {
-      try {
-        if (!video.videoWidth || !video.videoHeight) return;
-        const out = document.createElement('canvas');
-        out.width = video.videoWidth;
-        out.height = video.videoHeight;
-        const outCtx = out.getContext('2d');
-        outCtx.save();
-        outCtx.translate(out.width, 0);
-        outCtx.scale(-1, 1);
-        outCtx.drawImage(video, 0, 0, out.width, out.height);
-        outCtx.restore();
-        outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
-        out.toBlob(blob => {
-          if (!blob) return;
-          if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
-          const url = URL.createObjectURL(blob);
-          lastObjectUrl = url;
-          downloadLink.href = url;
-          downloadLink.download = `cambot_capture_${Date.now()}.jpg`;
-          downloadLink.click();
-          shutterSound.currentTime = 0;
-          shutterSound.play();
-        }, 'image/jpeg', 0.92);
-      } catch (e) {
-        console.error('capture error', e);
-      }
-    });
+
+shutterBtn.addEventListener('click', async () => {
+  try {
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    const out = document.createElement('canvas');
+    out.width = video.videoWidth;
+    out.height = video.videoHeight;
+    const outCtx = out.getContext('2d');
+
+    outCtx.save();
+    outCtx.translate(out.width, 0);
+    outCtx.scale(-1, 1);
+    outCtx.drawImage(video, 0, 0, out.width, out.height);
+    outCtx.restore();
+
+    outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
+
+    out.toBlob(blob => {
+      if (!blob) return;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cambot_capture_${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url); // cleanup
+      shutterSound.currentTime = 0;
+      shutterSound.play();
+    }, 'image/jpeg', 0.92);
+  } catch (e) {
+    console.error('capture error', e);
+  }
+});
 
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
